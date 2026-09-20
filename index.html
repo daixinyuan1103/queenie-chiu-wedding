@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Queenie &amp; Chiu · Wedding Invitation</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#17120e;
+    font-family:"Songti SC","Noto Serif SC","PingFang SC",serif; }
+  .scene { position:fixed; inset:0; }
+
+  /* ---- 开场封面（点击才播放） ---- */
+  #cover { position:fixed; inset:0; z-index:40; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(120% 90% at 50% 20%, #2a231a 0%, #17120e 60%);
+    color:#f3e9d2; opacity:1; transition:opacity .5s ease; }
+  #cover.hide { opacity:0; pointer-events:none; }
+  #cover .names { font-size:34px; letter-spacing:6px; font-weight:normal; }
+  #cover .amp { color:#c9a24b; font-style:italic; margin:0 6px; }
+  #cover .sub { margin-top:14px; font-size:14px; letter-spacing:4px; color:#cbb98a; }
+  #cover .btn { margin-top:52px; padding:13px 46px; border:1px solid #c9a24b; border-radius:40px;
+    font-size:15px; letter-spacing:2px; color:#e8d5a3; animation:breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100%{box-shadow:0 0 0 0 rgba(201,162,75,0);} 50%{box-shadow:0 0 22px 2px rgba(201,162,75,.35);} }
+
+  /* ---- 场景 1：开场视频（播完停在最后一帧，保留） ---- */
+  #videoScene { z-index:10; }
+  #videoScene video { width:100%; height:100%; object-fit:cover; display:block; background:#000; }
+
+  /* ---- 场景 2：信封 GIF（叠在视频最后一帧上） ---- */
+  #gifScene { z-index:20; opacity:0; pointer-events:none; transition:opacity .6s ease; }
+  #gifScene.show { opacity:1; }
+  #gif { position:absolute; top:0; left:0; display:block; }
+
+  /* ---- 火漆点击提示（位置由 JS 对齐到火漆中心） ---- */
+  #hint { position:fixed; z-index:25; transform:translateX(-50%);
+    text-align:center; opacity:0; pointer-events:none; transition:opacity .4s ease; }
+  #hint.show { opacity:1; pointer-events:auto; }
+  #hint .ring { width:64px; height:64px; margin:0 auto; border-radius:50%;
+    border:2px solid rgba(255,255,255,.92); position:relative;
+    animation:pulse 1.6s ease-out infinite; }
+  #hint .ring::after { content:''; position:absolute; inset:24px; border-radius:50%;
+    background:rgba(255,255,255,.95); }
+  #hint .txt { color:#fff; font-size:14px; letter-spacing:1px; margin-top:16px;
+    text-shadow:0 1px 3px rgba(0,0,0,.6); }
+  @keyframes pulse {
+    0%   { box-shadow:0 0 0 0 rgba(255,255,255,.45); }
+    70%  { box-shadow:0 0 0 24px rgba(255,255,255,0); }
+    100% { box-shadow:0 0 0 0 rgba(255,255,255,0); }
+  }
+
+  /* ---- 场景 3：长图（可上下滑动，直接出现） ---- */
+  #longScene { z-index:30; opacity:0; pointer-events:none; }
+  #longScene.show { opacity:1; pointer-events:auto; }
+  #scrollWrap { position:fixed; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; background:#F6F1E4; }
+  #longImg { width:100%; display:block; }
+</style>
+</head>
+<body>
+
+  <div id="cover">
+    <div class="names">Queenie <span class="amp">&amp;</span> Chiu</div>
+    <div class="sub">Wedding Invitation</div>
+    <div class="btn" id="startBtn">Click to start</div>
+  </div>
+
+  <audio id="bgm" loop preload="auto" src="music.mp3"></audio>
+
+  <div id="videoScene" class="scene">
+    <video id="intro" muted playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5" preload="auto"></video>
+  </div>
+
+  <div id="gifScene" class="scene">
+    <img id="gif" alt="">
+  </div>
+
+  <div id="hint">
+    <div class="ring"></div>
+    <div class="txt">Tap to open our story</div>
+  </div>
+
+  <div id="longScene" class="scene">
+    <div id="scrollWrap"><img id="longImg" src="letter.png" alt=""></div>
+  </div>
+
+<script>
+(function () {
+  /* ====== 可自行调整的参数（改完保存，重新扫码即可） ====== */
+  var SEAL_SHIFT_X = 1.5;    // 火漆中心左右偏移：占屏幕宽度百分比，正数=向右移
+  var SEAL_SHIFT_Y = 9.3;    // 火漆中心上下偏移：占屏幕高度百分比，正数=向下移（10 ≈ 1.5厘米）
+  var GIF_SCALE    = 1.35;   // 信封整体大小：>1 放大，<1 缩小
+
+  var VW = 720, VH = 1280;          // 视频分辨率
+  var GW = 746, GH = 2300;          // GIF 分辨率
+  var SEAL_X = 373, SEAL_Y = 722;   // GIF 第一帧里火漆（信封）中心
+  var GIF_MS = 6100;                // GIF 播放一次的总时长（毫秒）
+
+  var videoScene = document.getElementById('videoScene');
+  var gifScene   = document.getElementById('gifScene');
+  var longScene  = document.getElementById('longScene');
+  var video      = document.getElementById('intro');
+  var gif        = document.getElementById('gif');
+  var hint       = document.getElementById('hint');
+  var cover      = document.getElementById('cover');
+  var startBtn   = document.getElementById('startBtn');
+  var bgm        = document.getElementById('bgm');
+
+  // 火漆中心在屏幕上的位置
+  function sealScreen() {
+    return {
+      x: window.innerWidth/2  + SEAL_SHIFT_X/100 * window.innerWidth,
+      y: window.innerHeight/2 + SEAL_SHIFT_Y/100 * window.innerHeight
+    };
+  }
+
+  // 让 GIF 的火漆中心和提示圈都对齐到火漆中心
+  function layout() {
+    var gs = (window.innerHeight / VH) * GIF_SCALE;
+    var p  = sealScreen();
+    gif.style.width  = (GW * gs) + 'px';
+    gif.style.height = (GH * gs) + 'px';
+    gif.style.left   = (p.x - SEAL_X * gs) + 'px';
+    gif.style.top    = (p.y - SEAL_Y * gs) + 'px';
+    hint.style.left  = p.x + 'px';
+    hint.style.top   = (p.y - 32) + 'px';   // 圆圈(64px)中心对准火漆中心
+  }
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', layout);
+  layout();
+
+  // 把 GIF 的循环次数改成 1：只播一次，停在最后一帧
+  function onceGif(ab) {
+    var u8 = new Uint8Array(ab);
+    var marker = [0x4E,0x45,0x54,0x53,0x43,0x41,0x50,0x45,0x32,0x2E,0x30]; // "NETSCAPE2.0"
+    for (var i = 0; i + marker.length <= u8.length; i++) {
+      var hit = true;
+      for (var j = 0; j < marker.length; j++) { if (u8[i+j] !== marker[j]) { hit = false; break; } }
+      if (hit) {
+        u8[i+13] = 1;   // loop_lo = 1（循环次数 = 1，只播一次）
+        u8[i+14] = 0;   // loop_hi = 0
+        break;
+      }
+    }
+    return new Blob([u8], { type: 'image/gif' });
+  }
+
+  // 预取 GIF（后台加载，不触发播放），点击时秒开
+  var gifBlob = null;
+  fetch('envelope.gif').then(function (r) { return r.arrayBuffer(); })
+    .then(function (ab) { gifBlob = onceGif(ab); })
+    .catch(function () { gifBlob = null; });
+
+  // ---- 封面 / 播放逻辑（必须点击才播放） ----
+  var coverHidden = false;
+  function hideCover() { if (coverHidden) return; coverHidden = true; cover.classList.add('hide'); }
+  function showCover() { coverHidden = false; cover.classList.remove('hide'); }
+
+  video.addEventListener('playing', hideCover);
+  video.addEventListener('error', function () {
+    showCover();
+    startBtn.textContent = 'Load failed, tap to retry';
+  });
+
+  video.src = 'video.mp4';
+
+  // 点击封面：开始播放（用户手势）
+  cover.addEventListener('click', function () {
+    startBtn.textContent = 'Loading';
+    var p = video.play();
+    if (p && p.then) {
+      p.then(function () {}).catch(function () {
+        startBtn.textContent = 'Load failed, tap to retry';
+      });
+    }
+    bgm.play().catch(function () {});   // 用户点击后开始循环播放背景音乐
+  });
+
+  // ---- 视频结束后：出现火漆提示 ----
+  video.addEventListener('ended', function () {
+    hint.classList.add('show');
+  });
+
+  var started = false;
+  function startGif() {
+    if (started) return; started = true;
+    hint.classList.remove('show');
+    // 视频保持在最后一帧（信封），不淡出、不删除
+    if (gifBlob) {
+      gif.src = URL.createObjectURL(gifBlob);   // 从内存直接播放（从第 0 帧开始）
+    } else {
+      // 兜底：还没预取完，现场拉取并同样改成只播一次
+      fetch('envelope.gif').then(function (r) { return r.arrayBuffer(); })
+        .then(function (ab) { gif.src = URL.createObjectURL(onceGif(ab)); })
+        .catch(function () { gif.src = 'envelope.gif'; });
+    }
+    gifScene.classList.add('show');             // GIF 淡入并播放（信封与视频信封重叠）
+    setTimeout(function () {
+      longScene.classList.add('show');          // GIF 播完停在最后一帧后，长图直接出现盖住它
+      // GIF 只播一次、停在最后一帧，不淡出、不删除（长图不透明会自然盖住它）
+    }, GIF_MS);
+  }
+
+  // 点击火漆（或屏幕）开始动画
+  document.body.addEventListener('click', function () {
+    if (hint.classList.contains('show')) startGif();
+  });
+})();
+</script>
+</body>
+</html>
