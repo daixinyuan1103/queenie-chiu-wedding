@@ -15,10 +15,12 @@
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#17120e;
     font-family:"Songti SC","Noto Serif SC","PingFang SC",serif; }
-  .scene { position:fixed; inset:0; }
+  /* 修复 Android Chrome 地址栏收起/展开导致的底部露黑：用动态视口高度 */
+  @supports (height:100dvh) { html, body { height:100dvh; } }
+  .scene { position:fixed; top:0; left:0; right:0; bottom:0; }
 
   /* ---- 开场封面（点击才播放） ---- */
-  #cover { position:fixed; inset:0; z-index:40; display:flex; flex-direction:column;
+  #cover { position:fixed; top:0; left:0; right:0; bottom:0; z-index:40; display:flex; flex-direction:column;
     align-items:center; justify-content:center; text-align:center;
     background:radial-gradient(120% 90% at 50% 20%, #2a231a 0%, #17120e 60%);
     color:#f3e9d2; opacity:1; transition:opacity .5s ease; }
@@ -59,7 +61,7 @@
   /* ---- 场景 3：长图（可上下滑动，直接出现） ---- */
   #longScene { z-index:30; opacity:0; pointer-events:none; }
   #longScene.show { opacity:1; pointer-events:auto; }
-  #scrollWrap { position:fixed; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; background:#F6F1E4; }
+  #scrollWrap { position:fixed; top:0; left:0; right:0; bottom:0; overflow-y:auto; -webkit-overflow-scrolling:touch; background:#F6F1E4; }
   #longImg { width:100%; display:block; }
 </style>
 </head>
